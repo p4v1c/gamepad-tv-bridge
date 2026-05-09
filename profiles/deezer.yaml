@@ -1,0 +1,31 @@
+name: "Deezer"
+description: "deezer.com — music playback controls"
+
+match:
+  - title_contains: "Deezer"
+
+config:
+  deadzone: 0.25
+  repeat_delay_ms: 500
+  repeat_rate_ms: 200
+  long_press_ms: 700
+  stick_as_dpad: true
+  stick_threshold: 0.6
+
+bindings:
+  DPAD_UP:      { key: "KEY_UP" }
+  DPAD_DOWN:    { key: "KEY_DOWN" }
+  DPAD_LEFT:    { key: "KEY_LEFT" }
+  DPAD_RIGHT:   { key: "KEY_RIGHT" }
+  BUTTON_A:     { key: "KEY_RETURN" }
+  BUTTON_B:     { key: "KEY_ESCAPE" }
+  BUTTON_START: { key: "KEY_SPACE" }   # play/pause
+  BUTTON_LB:    { key: "KEY_PREVIOUSSONG" }
+  BUTTON_RB:    { key: "KEY_NEXTSONG" }
+  BUTTON_LT:    { key: "KEY_VOLUMEDOWN" }
+  BUTTON_RT:    { key: "KEY_VOLUMEUP" }
+  BUTTON_Y:     { key: "KEY_S" }       # shuffle
+  BUTTON_X:     { key: "KEY_R" }       # repeat
+  BUTTON_SELECT:
+    short_press: { key: "KEY_M" }       # mute
+    long_press:  { combo: ["KEY_LEFTCTRL", "KEY_W"] }

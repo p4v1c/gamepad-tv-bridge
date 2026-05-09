@@ -1,0 +1,32 @@
+name: "YouTube TV"
+description: "youtube.com/tv — kiosk navigation"
+
+match:
+  - title_contains: "YouTube"
+  - wm_class_contains: "firefox"
+
+config:
+  deadzone: 0.25
+  repeat_delay_ms: 400
+  repeat_rate_ms: 130
+  long_press_ms: 600
+  stick_as_dpad: true
+  stick_threshold: 0.6
+
+bindings:
+  DPAD_UP:      { key: "KEY_UP" }
+  DPAD_DOWN:    { key: "KEY_DOWN" }
+  DPAD_LEFT:    { key: "KEY_LEFT" }
+  DPAD_RIGHT:   { key: "KEY_RIGHT" }
+  BUTTON_A:     { key: "KEY_RETURN" }
+  BUTTON_B:     { key: "KEY_ESCAPE" }
+  BUTTON_Y:     { key: "KEY_F" }
+  BUTTON_X:     { key: "KEY_M" }
+  BUTTON_START: { key: "KEY_SPACE" }
+  BUTTON_LB:    { key: "KEY_J" }
+  BUTTON_RB:    { key: "KEY_L" }
+  BUTTON_LT:    { key: "KEY_DOWN" }
+  BUTTON_RT:    { key: "KEY_UP" }
+  BUTTON_SELECT:
+    short_press: { key: "KEY_M" }
+    long_press:  { combo: ["KEY_LEFTCTRL", "KEY_W"] }

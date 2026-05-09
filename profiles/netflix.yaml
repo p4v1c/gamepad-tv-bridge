@@ -1,0 +1,35 @@
+name: "Netflix"
+description: "netflix.com — video navigation"
+
+match:
+  - title_contains: "Netflix"
+
+config:
+  deadzone: 0.25
+  repeat_delay_ms: 350
+  repeat_rate_ms: 120
+  long_press_ms: 600
+  stick_as_dpad: true
+  stick_threshold: 0.6
+
+bindings:
+  DPAD_UP:      { key: "KEY_UP" }
+  DPAD_DOWN:    { key: "KEY_DOWN" }
+  DPAD_LEFT:    { key: "KEY_LEFT" }
+  DPAD_RIGHT:   { key: "KEY_RIGHT" }
+  BUTTON_A:     { key: "KEY_RETURN" }
+  BUTTON_B:     { key: "KEY_ESCAPE" }
+  BUTTON_START: { key: "KEY_SPACE" }   # play/pause
+  BUTTON_Y:     { key: "KEY_F" }       # fullscreen
+  BUTTON_X:     { key: "KEY_M" }       # mute
+  BUTTON_LB:
+    short_press: { key: "KEY_LEFT" }    # rewind 10s
+    long_press:  { key: "KEY_HOME" }
+  BUTTON_RB:
+    short_press: { key: "KEY_RIGHT" }   # forward 10s
+    long_press:  { key: "KEY_END" }
+  BUTTON_LT:    { key: "KEY_VOLUMEDOWN" }
+  BUTTON_RT:    { key: "KEY_VOLUMEUP" }
+  BUTTON_SELECT:
+    short_press: { key: "KEY_S" }       # subtitles
+    long_press:  { combo: ["KEY_LEFTCTRL", "KEY_W"] }

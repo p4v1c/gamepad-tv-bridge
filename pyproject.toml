@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gamepad-tv-bridge"
+version = "0.1.0"
+description = "Gamepad to OS-level keyboard event bridge for kiosk TV apps"
+requires-python = ">=3.11"
+dependencies = [
+    "evdev>=1.7.0",
+    "python-uinput>=0.11.2",
+    "python-xlib>=0.33",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "typer>=0.12",
+    "rich>=13.0",
+    "watchdog>=4.0",
+]
+
+[project.scripts]
+gamepad-bridge = "gamepad_bridge.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gamepad_bridge*"]
