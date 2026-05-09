@@ -1,0 +1,31 @@
+name: "Twitch TV Local"
+description: "SmartTwitchTV local (localhost:8080) — navigation gamepad"
+
+match:
+  - title_contains: "twitch-tv"
+  - title_contains: "Twitch TV"
+
+config:
+  deadzone: 0.25
+  repeat_delay_ms: 350
+  repeat_rate_ms: 120
+  long_press_ms: 600
+  stick_as_dpad: true
+  stick_threshold: 0.5
+
+bindings:
+  DPAD_UP:      { key: "KEY_UP" }
+  DPAD_DOWN:    { key: "KEY_DOWN" }
+  DPAD_LEFT:    { key: "KEY_LEFT" }
+  DPAD_RIGHT:   { key: "KEY_RIGHT" }
+  BUTTON_A:     { key: "KEY_ENTER" }
+  BUTTON_B:     { key: "KEY_ESC" }
+  BUTTON_Y:     { key: "KEY_ESC" }
+  BUTTON_START: { key: "KEY_SPACE" }
+  BUTTON_LB:    { key: "KEY_PAGEUP" }
+  BUTTON_RB:    { key: "KEY_PAGEDOWN" }
+  BUTTON_LT:    { key: "KEY_VOLUMEDOWN" }
+  BUTTON_RT:    { key: "KEY_VOLUMEUP" }
+  BUTTON_SELECT:
+    short_press: { key: "KEY_F" }
+    long_press:  { combo: ["KEY_LEFTCTRL", "KEY_W"] }

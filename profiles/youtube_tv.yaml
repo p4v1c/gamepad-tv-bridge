@@ -2,8 +2,8 @@ name: "YouTube TV"
 description: "youtube.com/tv — kiosk navigation"
 
 match:
+  - title_contains: "youtube-tv"
   - title_contains: "YouTube"
-  - wm_class_contains: "firefox"
 
 config:
   deadzone: 0.25

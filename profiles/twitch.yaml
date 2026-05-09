@@ -2,7 +2,8 @@ name: "Twitch"
 description: "twitch.tv — stream navigation and theatre mode"
 
 match:
-  - title_contains: "Twitch"
+  - title_contains: "Twitch - Watch"
+  - title_contains: "twitch.tv"
 
 config:
   deadzone: 0.25
