@@ -6,12 +6,12 @@ match:
   - title_contains: "Twitch TV"
 
 config:
-  deadzone: 0.25
-  repeat_delay_ms: 350
-  repeat_rate_ms: 120
+  deadzone: 0.20
+  repeat_delay_ms: 500
+  repeat_rate_ms: 150
   long_press_ms: 600
   stick_as_dpad: true
-  stick_threshold: 0.5
+  stick_threshold: 0.50
 
 bindings:
   DPAD_UP:      { key: "KEY_UP" }
