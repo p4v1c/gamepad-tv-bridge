@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from typing import Callable
 
 import evdev
@@ -94,23 +95,26 @@ class HotplugWatcher:
                 path = event.src_path
                 if not os.path.basename(path).startswith("event"):
                     return
-                try:
-                    dev = evdev.InputDevice(path)
-                    if _is_gamepad(dev):
-                        info = dev.info
-                        gd = GamepadDevice(
-                            path=path,
-                            name=dev.name,
-                            vendor_id=info.vendor,
-                            product_id=info.product,
-                        )
-                        dev.close()
-                        watcher._known[path] = gd
-                        watcher._on_connect(gd)
-                    else:
-                        dev.close()
-                except (PermissionError, OSError):
-                    pass
+                for attempt in range(6):
+                    try:
+                        dev = evdev.InputDevice(path)
+                        if _is_gamepad(dev):
+                            info = dev.info
+                            gd = GamepadDevice(
+                                path=path,
+                                name=dev.name,
+                                vendor_id=info.vendor,
+                                product_id=info.product,
+                            )
+                            dev.close()
+                            watcher._known[path] = gd
+                            watcher._on_connect(gd)
+                        else:
+                            dev.close()
+                        return
+                    except (PermissionError, OSError):
+                        if attempt < 5:
+                            time.sleep(0.3)
 
             def on_deleted(self, event):
                 path = event.src_path
