@@ -123,26 +123,34 @@ class Daemon:
         binding = profile.get_binding(button)
         cfg = profile.config
 
-        sm = self._state_machines.setdefault(
-            button,
-            ButtonStateMachine(
-                button=button,
-                long_press_ms=cfg.long_press_ms,
-                fire_action=self._fire_action,
-            ),
-        )
+        has_long_press = binding is not None and binding.long_press is not None
 
-        if value >= 0.5:  # pressed
-            sm.on_press(binding)
-            if binding and binding.short_press and getattr(binding.short_press, "repeat", True):
-                self._repeater.start(
-                    binding.short_press,
-                    delay_ms=cfg.repeat_delay_ms,
-                    rate_ms=cfg.repeat_rate_ms,
-                )
-        else:  # released
-            self._repeater.stop()
-            sm.on_release()
+        if has_long_press:
+            # Buttons with short+long press distinction: use state machine (fires on release)
+            sm = self._state_machines.setdefault(
+                button,
+                ButtonStateMachine(
+                    button=button,
+                    long_press_ms=cfg.long_press_ms,
+                    fire_action=self._fire_action,
+                ),
+            )
+            if value >= 0.5:
+                sm.on_press(binding)
+            else:
+                sm.on_release()
+        else:
+            # Simple button (navigation, media…): fire immediately on press + repeat
+            if value >= 0.5:
+                if binding and binding.short_press:
+                    self._fire_action(binding.short_press, False)
+                    self._repeater.start(
+                        binding.short_press,
+                        delay_ms=cfg.repeat_delay_ms,
+                        rate_ms=cfg.repeat_rate_ms,
+                    )
+            else:
+                self._repeater.stop()
 
     def _fire_action(self, action: KeyAction, is_repeat: bool) -> None:
         assert self._injector is not None
