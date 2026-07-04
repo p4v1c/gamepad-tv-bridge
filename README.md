@@ -60,6 +60,23 @@ bindings:
 
 Profiles are hot-reloaded on change — no restart needed.
 
+Sticks are converted to dpad presses with hysteresis (release at 65% of the
+press threshold) and a dominant-axis lock, so diagonal wobble never fires the
+perpendicular direction.
+
+## Deployment on the GameCore box
+
+How this runs on the [GameCore](https://github.com/p4v1c/GamecoreRenew) living-room box:
+
+- Cloned in `/opt/gamepad-tv-bridge`, installed **editable** in the user venv:
+  `~/.venv/bin/pip install -e /opt/gamepad-tv-bridge`
+- User unit `~/.config/systemd/user/gamepad-tv-bridge.service` runs
+  `%h/.venv/bin/python -m gamepad_bridge start` with `Restart=on-failure`,
+  `WantedBy=graphical-session.target` (see `install/gamepad-tv-bridge.service`).
+- The `twitch_tv_local` profile drives [EmberTV](https://github.com/p4v1c/Twitch-TV)
+  (window title "Twitch TV", Firefox kiosk at `https://localhost:8097`) — the
+  in-page JS gamepad handling was removed from EmberTV in favour of this daemon.
+
 ## Supported controllers
 
 | Controller        | Vendor ID |
