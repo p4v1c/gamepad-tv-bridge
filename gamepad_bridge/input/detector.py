@@ -125,6 +125,19 @@ class HotplugWatcher:
         observer = Observer()
         observer.schedule(_Handler(), "/dev/input", recursive=False)
         observer.start()
-        self._stop.wait()
+        # Periodic rescan: catches devices whose inotify event was missed or
+        # whose permissions weren't ready yet (udev busy during boot).
+        while not self._stop.wait(5.0):
+            self._rescan()
         observer.stop()
         observer.join()
+
+    def _rescan(self) -> None:
+        for gd in detect_gamepads():
+            if gd.path not in self._known:
+                self._known[gd.path] = gd
+                self._on_connect(gd)
+        for path in list(self._known):
+            if not os.path.exists(path):
+                del self._known[path]
+                self._on_disconnect(path)
