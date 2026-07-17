@@ -47,6 +47,13 @@ user_pref("media.autoplay.default", 0);
 EOF
 fi
 
+# Forcer le backend X11 : le bridge détecte la fenêtre active via X (xdotool).
+# Sous une session Wayland (ex. KDE), Firefox démarrerait en Wayland natif —
+# invisible à cette détection, donc le profil `stremio` ne matcherait pas.
+# Sur le kiosk openbox X11 (déploiement cible) c'est un no-op.
+export MOZ_ENABLE_WAYLAND=0
+export GDK_BACKEND=x11
+
 exec firefox --profile "$PROFILE_DIR" \
              --kiosk \
              "$URL"
