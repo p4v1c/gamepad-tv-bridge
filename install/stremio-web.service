@@ -5,8 +5,9 @@ After=graphical-session.target
 [Service]
 Type=simple
 # Sert le build du fork (~/stremio-web/build) en statique. HashRouter → pas
-# besoin de fallback SPA. Écoute uniquement en local.
-ExecStart=/usr/bin/python3 -m http.server 8096 --bind 127.0.0.1 --directory %h/stremio-web/build
+# besoin de fallback SPA. Écoute uniquement en local. no-cache sur index.html
+# pour que le kiosk voie chaque rebuild (voir serve-stremio-web.py).
+ExecStart=/usr/bin/python3 /opt/gamepad-tv-bridge/install/serve-stremio-web.py %h/stremio-web/build 8096
 Restart=on-failure
 RestartSec=3
 

@@ -90,7 +90,7 @@ Three user services (templates in `install/`, installed by `setup-stremio.sh`):
 | Service | Role |
 |---|---|
 | `stremio-server.service` | Local streaming server (EngineFS on `127.0.0.1:11470`). Reuses the **node + `server.js` bundled in the Stremio Flatpak** (`flatpak run --command=node com.stremio.Stremio /app/opt/stremio/server.js`) — no extra package. |
-| `stremio-web.service` | Serves the fork's `build/` on `127.0.0.1:8096` (`python3 -m http.server`; the UI uses `HashRouter`, so no SPA fallback is needed). |
+| `stremio-web.service` | Serves the fork's `build/` on `127.0.0.1:8096` (`install/serve-stremio-web.py`: static server with `no-cache` on `index.html` so the kiosk picks up every rebuild; the UI uses `HashRouter`, so no SPA fallback is needed). |
 | `stremio-tv.service` | Firefox `--kiosk` on `http://127.0.0.1:8096` (`install/launch-stremio.sh`, modelled on `launch-youtube-tv.sh`). `DISPLAY` is auto-detected (`:0` on the openbox kiosk, `:1`/Xwayland under KDE). **Not enabled at login**: the kiosk is launched on demand by the Stremio tile in GameCore (`config/apps.json` runs `launch-stremio.sh`), the unit is only a manual alternative. |
 
 The kiosk window title is *"Stremio - Freedom to Stream"*, matched by the
@@ -102,9 +102,11 @@ closes.
 ### Install
 
 ```bash
-# 1. Build the fork (Node >= 22, pnpm >= 11)
+# 1. Build the fork (Node >= 22, pnpm >= 11). SERVICE_WORKER_DISABLED: the PWA
+#    service worker would pin the old build in the kiosk's cache forever —
+#    useless (and harmful) with a local server.
 git clone -b feature/tv-virtual-keyboard https://github.com/p4v1c/stremio-web.git ~/stremio-web
-cd ~/stremio-web && pnpm install && pnpm build     # → ~/stremio-web/build
+cd ~/stremio-web && pnpm install && SERVICE_WORKER_DISABLED=true pnpm build   # → ~/stremio-web/build
 
 # 2. Install the user services (backends enabled; kiosk stays on-demand)
 /opt/gamepad-tv-bridge/install/setup-stremio.sh
@@ -121,9 +123,9 @@ and is untouched — it still provides the streaming server binary.
 cd ~/stremio-web
 git fetch upstream
 git checkout feature/tv-virtual-keyboard
-git rebase upstream/main          # only SearchBar.js + components/VirtualKeyboard/ are ours
-pnpm install && pnpm build        # rebuild build/
-systemctl --user restart stremio-web.service stremio-tv.service
+git rebase upstream/main          # ours: components/VirtualKeyboard/, SearchBar.js, MainNavBars.tsx
+pnpm install && SERVICE_WORKER_DISABLED=true pnpm build   # rebuild build/
+# nothing to restart: the static server picks the new build up on next launch
 ```
 
 The fork keeps changes minimal and localized (a new
