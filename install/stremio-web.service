@@ -1,0 +1,14 @@
+[Unit]
+Description=Stremio TV — static server for the forked stremio-web UI
+After=graphical-session.target
+
+[Service]
+Type=simple
+# Sert le build du fork (~/stremio-web/build) en statique. HashRouter → pas
+# besoin de fallback SPA. Écoute uniquement en local.
+ExecStart=/usr/bin/python3 -m http.server 8096 --bind 127.0.0.1 --directory %h/stremio-web/build
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

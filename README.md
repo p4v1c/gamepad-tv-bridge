@@ -77,6 +77,58 @@ How this runs on the [GameCore](https://github.com/p4v1c/GamecoreRenew) living-r
   (window title "Twitch TV", Firefox kiosk at `https://localhost:8097`) — the
   in-page JS gamepad handling was removed from EmberTV in favour of this daemon.
 
+## Stremio TV (forked web UI + on-screen keyboard)
+
+Stremio ships as a Flatpak whose UI has **no on-screen keyboard**, so the search
+box is unusable with a gamepad. Instead we run a fork of
+[stremio-web](https://github.com/p4v1c/stremio-web) (branch
+`feature/tv-virtual-keyboard`) that adds a TV virtual keyboard, served in a
+Firefox kiosk and driven by this daemon via the `stremio` profile.
+
+Three user services (templates in `install/`, installed by `setup-stremio.sh`):
+
+| Service | Role |
+|---|---|
+| `stremio-server.service` | Local streaming server (EngineFS on `127.0.0.1:11470`). Reuses the **node + `server.js` bundled in the Stremio Flatpak** (`flatpak run --command=node com.stremio.Stremio /app/opt/stremio/server.js`) — no extra package. |
+| `stremio-web.service` | Serves the fork's `build/` on `127.0.0.1:8096` (`python3 -m http.server`; the UI uses `HashRouter`, so no SPA fallback is needed). |
+| `stremio-tv.service` | Firefox `--kiosk` on `http://127.0.0.1:8096` (`install/launch-stremio.sh`, modelled on `launch-youtube-tv.sh`). `DISPLAY` is auto-detected (`:0` on the openbox kiosk, `:1`/Xwayland under KDE). |
+
+The kiosk window title is *"Stremio - Freedom to Stream"*, matched by the
+`stremio` profile (`title_contains: "Stremio"`), which maps DPAD→arrows,
+A→Enter, B→Escape. On the search bar, **A opens the virtual keyboard**; arrows
+move the highlighted key, A activates it, `VALIDER` submits and `FERMER`/B
+closes.
+
+### Install
+
+```bash
+# 1. Build the fork (Node >= 22, pnpm >= 11)
+git clone -b feature/tv-virtual-keyboard https://github.com/p4v1c/stremio-web.git ~/stremio-web
+cd ~/stremio-web && pnpm install && pnpm build     # → ~/stremio-web/build
+
+# 2. Install + enable the three user services
+/opt/gamepad-tv-bridge/install/setup-stremio.sh
+systemctl --user start stremio-tv.service          # or just re-login
+```
+
+`setup-stremio.sh --uninstall` removes them. The Flatpak client stays installed
+and is untouched — it still provides the streaming server binary.
+
+### Updating the fork (rebase on upstream + rebuild)
+
+```bash
+cd ~/stremio-web
+git fetch upstream
+git checkout feature/tv-virtual-keyboard
+git rebase upstream/main          # only SearchBar.js + components/VirtualKeyboard/ are ours
+pnpm install && pnpm build        # rebuild build/
+systemctl --user restart stremio-web.service stremio-tv.service
+```
+
+The fork keeps changes minimal and localized (a new
+`src/components/VirtualKeyboard/` component plus a small `SearchBar.js` hook) to
+keep these rebases painless.
+
 ## Supported controllers
 
 | Controller        | Vendor ID |

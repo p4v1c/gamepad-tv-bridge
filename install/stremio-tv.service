@@ -1,0 +1,16 @@
+[Unit]
+Description=Stremio TV — Firefox kiosk on the forked stremio-web UI
+After=graphical-session.target stremio-web.service
+Wants=stremio-web.service stremio-server.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# DISPLAY/XAUTHORITY sont auto-détectés par le script (kiosk openbox = :0,
+# KDE/Wayland/Xwayland = :1).
+ExecStart=/usr/bin/env bash /opt/gamepad-tv-bridge/install/launch-stremio.sh
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=Stremio TV — local streaming server (EngineFS on 11470)
+After=network-online.target
+
+[Service]
+Type=simple
+# Réutilise le serveur de streaming officiel embarqué dans le flatpak Stremio
+# (node + server.js), donc aucune dépendance supplémentaire. Il écoute sur
+# 127.0.0.1:11470, que l'UI web détecte automatiquement.
+ExecStart=/usr/bin/flatpak run --command=node com.stremio.Stremio /app/opt/stremio/server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
