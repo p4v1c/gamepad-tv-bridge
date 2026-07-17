@@ -126,6 +126,9 @@ git checkout feature/tv-virtual-keyboard
 git rebase upstream/main          # ours: components/VirtualKeyboard/, SearchBar.js, MainNavBars.tsx
 pnpm install && SERVICE_WORKER_DISABLED=true pnpm build   # rebuild build/
 # nothing to restart: the static server picks the new build up on next launch
+# NB: always build from a fresh commit — webpack names the asset dir after
+# git HEAD and those URLs are cached as immutable by the kiosk, so building
+# twice on the same HEAD would serve stale assets.
 ```
 
 The fork keeps changes minimal and localized (a new
