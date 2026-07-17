@@ -91,7 +91,7 @@ Three user services (templates in `install/`, installed by `setup-stremio.sh`):
 |---|---|
 | `stremio-server.service` | Local streaming server (EngineFS on `127.0.0.1:11470`). Reuses the **node + `server.js` bundled in the Stremio Flatpak** (`flatpak run --command=node com.stremio.Stremio /app/opt/stremio/server.js`) — no extra package. |
 | `stremio-web.service` | Serves the fork's `build/` on `127.0.0.1:8096` (`python3 -m http.server`; the UI uses `HashRouter`, so no SPA fallback is needed). |
-| `stremio-tv.service` | Firefox `--kiosk` on `http://127.0.0.1:8096` (`install/launch-stremio.sh`, modelled on `launch-youtube-tv.sh`). `DISPLAY` is auto-detected (`:0` on the openbox kiosk, `:1`/Xwayland under KDE). |
+| `stremio-tv.service` | Firefox `--kiosk` on `http://127.0.0.1:8096` (`install/launch-stremio.sh`, modelled on `launch-youtube-tv.sh`). `DISPLAY` is auto-detected (`:0` on the openbox kiosk, `:1`/Xwayland under KDE). **Not enabled at login**: the kiosk is launched on demand by the Stremio tile in GameCore (`config/apps.json` runs `launch-stremio.sh`), the unit is only a manual alternative. |
 
 The kiosk window title is *"Stremio - Freedom to Stream"*, matched by the
 `stremio` profile (`title_contains: "Stremio"`), which maps DPAD→arrows,
@@ -106,9 +106,10 @@ closes.
 git clone -b feature/tv-virtual-keyboard https://github.com/p4v1c/stremio-web.git ~/stremio-web
 cd ~/stremio-web && pnpm install && pnpm build     # → ~/stremio-web/build
 
-# 2. Install + enable the three user services
+# 2. Install the user services (backends enabled; kiosk stays on-demand)
 /opt/gamepad-tv-bridge/install/setup-stremio.sh
-systemctl --user start stremio-tv.service          # or just re-login
+# Launch the UI from the Stremio tile in GameCore, or manually:
+systemctl --user start stremio-tv.service
 ```
 
 `setup-stremio.sh --uninstall` removes them. The Flatpak client stays installed

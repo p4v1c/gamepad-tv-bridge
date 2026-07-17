@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 #
-# setup-stremio.sh — installe et active les services utilisateur Stremio TV :
-#   - stremio-server.service : serveur de streaming local (11470)
-#   - stremio-web.service    : sert le build du fork stremio-web (8096)
+# setup-stremio.sh — installe les services utilisateur Stremio TV :
+#   - stremio-server.service : serveur de streaming local (11470)   [activé]
+#   - stremio-web.service    : sert le build du fork stremio-web (8096) [activé]
 #   - stremio-tv.service     : Firefox kiosk sur l'UI forkée (clavier virtuel)
+#                              [installé mais PAS activé : le kiosk se lance
+#                              depuis la tuile Stremio de GameCore (apps.json),
+#                              ou manuellement via systemctl --user start]
 #
 # Prérequis : le fork stremio-web construit dans ~/stremio-web (voir README).
 #
@@ -38,12 +41,15 @@ for u in "${UNITS[@]}"; do
     echo "• installé : $u"
 done
 
-# daemon-reload + enable via le bus utilisateur si dispo.
+# daemon-reload + enable via le bus utilisateur si dispo. Seuls les backends
+# démarrent avec la session ; le kiosk (stremio-tv) est lancé à la demande par
+# la tuile Stremio de GameCore.
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 if systemctl --user daemon-reload 2>/dev/null; then
-    systemctl --user enable "${UNITS[@]}" 2>/dev/null || true
-    echo "✅ Services activés (démarrage à l'ouverture de session)."
-    echo "   Démarrer maintenant :  systemctl --user start stremio-tv.service"
+    systemctl --user enable stremio-server.service stremio-web.service 2>/dev/null || true
+    systemctl --user disable stremio-tv.service 2>/dev/null || true
+    echo "✅ Backends activés (démarrage à l'ouverture de session)."
+    echo "   Kiosk : tuile Stremio de GameCore, ou :  systemctl --user start stremio-tv.service"
 else
-    echo "ℹ️  Pas de bus utilisateur ici — les services démarreront au prochain login."
+    echo "ℹ️  Pas de bus utilisateur ici — les backends démarreront au prochain login."
 fi
