@@ -218,11 +218,23 @@ class Daemon:
         daemon = self
 
         class _Handler(FileSystemEventHandler):
-            def on_modified(self, event):
-                if not event.src_path.endswith(".yaml"):
+            # Editors and tools often replace files atomically (write to a
+            # temp file + rename), which fires on_created/on_moved instead of
+            # on_modified — handle all three or those edits are missed.
+            def _maybe_reload(self, path):
+                if not str(path).endswith(".yaml"):
                     return
-                console.print(f"[blue]Reloading profiles (changed: {event.src_path})[/blue]")
+                console.print(f"[blue]Reloading profiles (changed: {path})[/blue]")
                 daemon._reload_profiles()
+
+            def on_modified(self, event):
+                self._maybe_reload(event.src_path)
+
+            def on_created(self, event):
+                self._maybe_reload(event.src_path)
+
+            def on_moved(self, event):
+                self._maybe_reload(getattr(event, "dest_path", event.src_path))
 
         if not self._profiles_dir.exists():
             return
