@@ -89,7 +89,7 @@ Three user services (templates in `install/`, installed by `setup-stremio.sh`):
 
 | Service | Role |
 |---|---|
-| `stremio-server.service` | Local streaming server (EngineFS on `127.0.0.1:11470`). Reuses the **node + `server.js` bundled in the Stremio Flatpak** (`flatpak run --command=node com.stremio.Stremio /app/opt/stremio/server.js`) — no extra package. |
+| `stremio-server.service` | Local streaming server (EngineFS on `127.0.0.1:11470`). Reuses the **`server.js` bundled in the Stremio Flatpak**, but runs it with the **host's node** — see [Why the streaming server runs outside the Flatpak](#why-the-streaming-server-runs-outside-the-flatpak). `install/stremio-server.sh` locates `server.js` and falls back to the Flatpak's node if the host lacks one. |
 | `stremio-web.service` | Serves the fork's `build/` on `127.0.0.1:8096` (`install/serve-stremio-web.py`: static server with `no-cache` on `index.html` so the kiosk picks up every rebuild; the UI uses `HashRouter`, so no SPA fallback is needed). |
 | `stremio-tv.service` | Firefox `--kiosk` on `http://127.0.0.1:8096` (`install/launch-stremio.sh`, modelled on `launch-youtube-tv.sh`). `DISPLAY` is auto-detected (`:0` on the openbox kiosk, `:1`/Xwayland under KDE). **Not enabled at login**: the kiosk is launched on demand by the Stremio tile in GameCore (`config/apps.json` runs `launch-stremio.sh`), the unit is only a manual alternative. |
 
@@ -116,6 +116,44 @@ systemctl --user start stremio-tv.service
 
 `setup-stremio.sh --uninstall` removes them. The Flatpak client stays installed
 and is untouched — it still provides the streaming server binary.
+
+Host requirements: `nodejs` and **`ffmpeg`**. Without the latter, playback of
+x265 sources fails — see below.
+
+### Why the streaming server runs outside the Flatpak
+
+Symptom this avoids: *"the movie never starts, or takes forever to load"* — with
+a debrid service (AllDebrid, Real-Debrid…) whose links are fast by definition.
+
+In the browser, a stream is either played **directly** by the `<video>` element,
+or **transcoded** by the local server (`/hlsv2/…/master.m3u8`). Under Firefox the
+direct path is almost never taken: `mediaCapabilities.js` in `stremio-video` only
+adds `matroska,webm` to the playable formats when `window.chrome` exists, so
+**only MP4 plays directly** — every MKV, i.e. nearly every debrid release, goes
+through the transcoder. `canPlayStream()` also rejects any file carrying
+**embedded subtitles** or two or more playable audio tracks.
+
+So the transcoder has to work, and inside the Flatpak it cannot: its ffmpeg is
+built with `--disable-decoder='h264,hevc,vc1,vvc'`.
+
+| Source | Inside the Flatpak | With the host's ffmpeg |
+|---|---|---|
+| x265 / HEVC | `no decoder found for: hevc` → `{"error":{"code":10,"message":"Failed to read hls playlist: Premature close"}}` → the player waits forever | plays |
+| x264 | `libopenh264` only, software, VAAPI impossible (hwaccel needs the native decoder) → very slow start | native decoders, hardware-capable |
+
+Measured on a 1080p x265 + E-AC-3 5.1 + embedded subtitles sample: first HLS
+segment **never delivered** with the Flatpak's ffmpeg, **281 KB in 0.52 s** with
+the host's.
+
+The Flatpak *client* is unaffected by all this — it never transcodes, it plays
+through its own bundled `libmpv` (`/app/lib/libmpv.so`), and `supportsTranscoding()`
+returns `false` as soon as `window.qt` is defined. That's why the desktop app
+plays a file the web UI cannot.
+
+Two takeaways if you debug this again: the fork's own code is not involved (its
+diff is UI and gamepad only), and a Chromium-based kiosk would sidestep the
+transcoder entirely (`window.chrome` → MKV plays directly) at the cost of the
+Firefox-specific window-title detection this daemon relies on.
 
 ### Updating the fork (rebase on upstream + rebuild)
 
