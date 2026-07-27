@@ -35,7 +35,14 @@ if [ ! -f "$BUILD_DIR/index.html" ]; then
 fi
 
 mkdir -p "$UNIT_DIR"
-chmod +x "$HERE/launch-stremio.sh"
+chmod +x "$HERE/launch-stremio.sh" "$HERE/stremio-server.sh"
+
+# Le transcodage HLS des sources x265 exige un ffmpeg complet côté hôte : celui
+# du runtime flatpak est bâti sans décodeur HEVC (cf stremio-server.sh).
+if ! command -v ffmpeg >/dev/null 2>&1; then
+    echo "⚠️  ffmpeg absent de l'hôte — les films x265 ne se lanceront pas." >&2
+    echo "    Installe-le :  sudo pacman -S ffmpeg" >&2
+fi
 for u in "${UNITS[@]}"; do
     cp "$HERE/$u" "$UNIT_DIR/$u"
     echo "• installé : $u"
