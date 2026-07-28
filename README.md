@@ -77,101 +77,19 @@ How this runs on the [GameCore](https://github.com/p4v1c/GamecoreRenew) living-r
   (window title "Twitch TV", Firefox kiosk at `https://localhost:8097`) — the
   in-page JS gamepad handling was removed from EmberTV in favour of this daemon.
 
-## Stremio TV (forked web UI + on-screen keyboard)
+## Stremio
 
-Stremio ships as a Flatpak whose UI has **no on-screen keyboard**, so the search
-box is unusable with a gamepad. Instead we run a fork of
-[stremio-web](https://github.com/p4v1c/stremio-web) (branch
-`feature/tv-virtual-keyboard`) that adds a TV virtual keyboard, served in a
-Firefox kiosk and driven by this daemon via the `stremio` profile.
+Stremio is no longer handled here. Its desktop client reads the gamepad
+natively, and its window is Wayland-native — invisible to the X11 title
+detection this daemon matches profiles on, so no profile would ever apply to
+it. The on-screen keyboard it was missing now lives in
+[stremio-gamepad-keyboard](https://github.com/p4v1c/stremio-gamepad-keyboard),
+which injects it into Stremio's own interface without touching the client.
 
-Three user services (templates in `install/`, installed by `setup-stremio.sh`):
-
-| Service | Role |
-|---|---|
-| `stremio-server.service` | Local streaming server (EngineFS on `127.0.0.1:11470`). Reuses the **`server.js` bundled in the Stremio Flatpak**, but runs it with the **host's node** — see [Why the streaming server runs outside the Flatpak](#why-the-streaming-server-runs-outside-the-flatpak). `install/stremio-server.sh` locates `server.js` and falls back to the Flatpak's node if the host lacks one. |
-| `stremio-web.service` | Serves the fork's `build/` on `127.0.0.1:8096` (`install/serve-stremio-web.py`: static server with `no-cache` on `index.html` so the kiosk picks up every rebuild; the UI uses `HashRouter`, so no SPA fallback is needed). |
-| `stremio-tv.service` | Firefox `--kiosk` on `http://127.0.0.1:8096` (`install/launch-stremio.sh`, modelled on `launch-youtube-tv.sh`). `DISPLAY` is auto-detected (`:0` on the openbox kiosk, `:1`/Xwayland under KDE). **Not enabled at login**: the kiosk is launched on demand by the Stremio tile in GameCore (`config/apps.json` runs `launch-stremio.sh`), the unit is only a manual alternative. |
-
-The kiosk window title is *"Stremio - Freedom to Stream"*, matched by the
-`stremio` profile (`title_contains: "Stremio"`), which maps DPAD→arrows,
-A→Enter, B→Escape. On the search bar, **A opens the virtual keyboard**; arrows
-move the highlighted key, A activates it, `VALIDER` submits and `FERMER`/B
-closes.
-
-### Install
-
-```bash
-# 1. Build the fork (Node >= 22, pnpm >= 11). SERVICE_WORKER_DISABLED: the PWA
-#    service worker would pin the old build in the kiosk's cache forever —
-#    useless (and harmful) with a local server.
-git clone -b feature/tv-virtual-keyboard https://github.com/p4v1c/stremio-web.git ~/stremio-web
-cd ~/stremio-web && pnpm install && SERVICE_WORKER_DISABLED=true pnpm build   # → ~/stremio-web/build
-
-# 2. Install the user services (backends enabled; kiosk stays on-demand)
-/opt/gamepad-tv-bridge/install/setup-stremio.sh
-# Launch the UI from the Stremio tile in GameCore, or manually:
-systemctl --user start stremio-tv.service
-```
-
-`setup-stremio.sh --uninstall` removes them. The Flatpak client stays installed
-and is untouched — it still provides the streaming server binary.
-
-Host requirements: `nodejs` and **`ffmpeg`**. Without the latter, playback of
-x265 sources fails — see below.
-
-### Why the streaming server runs outside the Flatpak
-
-Symptom this avoids: *"the movie never starts, or takes forever to load"* — with
-a debrid service (AllDebrid, Real-Debrid…) whose links are fast by definition.
-
-In the browser, a stream is either played **directly** by the `<video>` element,
-or **transcoded** by the local server (`/hlsv2/…/master.m3u8`). Under Firefox the
-direct path is almost never taken: `mediaCapabilities.js` in `stremio-video` only
-adds `matroska,webm` to the playable formats when `window.chrome` exists, so
-**only MP4 plays directly** — every MKV, i.e. nearly every debrid release, goes
-through the transcoder. `canPlayStream()` also rejects any file carrying
-**embedded subtitles** or two or more playable audio tracks.
-
-So the transcoder has to work, and inside the Flatpak it cannot: its ffmpeg is
-built with `--disable-decoder='h264,hevc,vc1,vvc'`.
-
-| Source | Inside the Flatpak | With the host's ffmpeg |
-|---|---|---|
-| x265 / HEVC | `no decoder found for: hevc` → `{"error":{"code":10,"message":"Failed to read hls playlist: Premature close"}}` → the player waits forever | plays |
-| x264 | `libopenh264` only, software, VAAPI impossible (hwaccel needs the native decoder) → very slow start | native decoders, hardware-capable |
-
-Measured on a 1080p x265 + E-AC-3 5.1 + embedded subtitles sample: first HLS
-segment **never delivered** with the Flatpak's ffmpeg, **281 KB in 0.52 s** with
-the host's.
-
-The Flatpak *client* is unaffected by all this — it never transcodes, it plays
-through its own bundled `libmpv` (`/app/lib/libmpv.so`), and `supportsTranscoding()`
-returns `false` as soon as `window.qt` is defined. That's why the desktop app
-plays a file the web UI cannot.
-
-Two takeaways if you debug this again: the fork's own code is not involved (its
-diff is UI and gamepad only), and a Chromium-based kiosk would sidestep the
-transcoder entirely (`window.chrome` → MKV plays directly) at the cost of the
-Firefox-specific window-title detection this daemon relies on.
-
-### Updating the fork (rebase on upstream + rebuild)
-
-```bash
-cd ~/stremio-web
-git fetch upstream
-git checkout feature/tv-virtual-keyboard
-git rebase upstream/main          # ours: components/VirtualKeyboard/, SearchBar.js, MainNavBars.tsx
-pnpm install && SERVICE_WORKER_DISABLED=true pnpm build   # rebuild build/
-# nothing to restart: the static server picks the new build up on next launch
-# NB: always build from a fresh commit — webpack names the asset dir after
-# git HEAD and those URLs are cached as immutable by the kiosk, so building
-# twice on the same HEAD would serve stale assets.
-```
-
-The fork keeps changes minimal and localized (a new
-`src/components/VirtualKeyboard/` component plus a small `SearchBar.js` hook) to
-keep these rebases painless.
+The forked web UI in a Firefox kiosk that used to live here — three user
+services, plus a streaming server pushed onto the host's node to work around
+the Flatpak runtime's missing HEVC decoder — went with it. That diagnosis is
+kept in GameCore's `docs/STREMIO.md`.
 
 ## Supported controllers
 
