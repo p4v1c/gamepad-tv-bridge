@@ -16,12 +16,14 @@ Type=simple
 # adds the user to `input`, and the session inherits it.
 #
 # No Environment=DISPLAY=:0 either. That is the display manager's X server, not
-# the session's, and no XAUTHORITY came with it, so every xprop call failed:
-# _scan_firefox_window() returned None, matcher._active stayed None, and the
-# daemon dropped every event it read. Totally inert, with nothing in the log but
-# "Window: '(none)' → passthrough (no injection)". DISPLAY and XAUTHORITY come
-# from the session instead — Plasma runs `systemctl --user import-environment`
-# for exactly this. See the README.
+# the session's, and no XAUTHORITY came with it, so every xprop call failed and
+# _scan_firefox_window() returned None. That kills the *title* fallback only —
+# _detect_active() first reads the Firefox --profile name out of /proc, which
+# needs no X, so a GameCore kiosk tile still matched. Measured on a real box:
+# ":0" did not answer while the session was on ":1", and the journal showed
+# profile matches working throughout. DISPLAY and XAUTHORITY come from the
+# session instead — Plasma runs `systemctl --user import-environment` for
+# exactly this. See the README.
 ExecStart=%h/.venv/bin/python -m gamepad_bridge start
 Restart=on-failure
 RestartSec=3

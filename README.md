@@ -76,23 +76,32 @@ How this runs on the [GameCore](https://github.com/p4v1c/GamecoreRenew) living-r
 
 > ### The unit needs `DISPLAY` and `XAUTHORITY` from the session
 >
-> Profile matching is done by reading the active window's title with `xprop`.
-> Without a working X11 connection the daemon reads every event and injects
-> nothing — the gamepad is completely inert in Netflix, Twitch and Deezer, and
-> the only thing in the journal is `Window: '(none)' → passthrough`.
+> `_detect_active()` has **two** paths, and only the second needs X:
+>
+> 1. **The Firefox `--profile` name**, read from `/proc/*/cmdline`. No X at all.
+>    This is how a GameCore kiosk tile is matched, since it launches
+>    `firefox --profile <name> --kiosk …`.
+> 2. **`xprop`**, scanning window titles. The fallback for anything that is not
+>    a named-profile Firefox.
+>
+> So a broken X11 connection does **not** make the daemon inert: profile-based
+> matching keeps working, and only the title fallback dies. The journal shows
+> `Window: '(none)' → passthrough` when *neither* path resolves.
 >
 > The unit deliberately does **not** set `Environment=DISPLAY=:0`: that is the
 > display manager's server, not the session's, and it carries no matching
-> `XAUTHORITY`. Both must be imported into the user manager by the session:
+> `XAUTHORITY`. On a box with both `X0` and `X1` sockets — which is what SDDM
+> plus a session produces — `:0` is often the one that does not answer, so the
+> fallback is silently dead. Both variables must be imported into the user
+> manager by the session:
 >
 > ```bash
 > systemctl --user import-environment DISPLAY XAUTHORITY
 > ```
 >
 > Plasma does this itself. On a session that does not, add it to the autostart
-> before this service, or the daemon will start and do nothing. If the X11
-> connection fails, the daemon now says so at WARNING level instead of failing
-> silently.
+> before this service. If the X11 connection fails, the daemon now says so at
+> WARNING level instead of failing silently.
 >
 > It also does not set `SupplementaryGroups=input` — that directive is not
 > supported in a `--user` unit and makes systemd refuse to start the service at
