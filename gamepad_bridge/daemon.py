@@ -93,11 +93,37 @@ class Daemon:
                 continue
             self._handle_event(ev)
 
+    def _flush_input_state(self) -> None:
+        """Drop every trace of a button being held: repeat, state machines, sticks.
+
+        Runs whenever the active profile changes or goes away. Without it, a key
+        held at that moment kept repeating for ever: _handle_event returned on
+        `profile is None` before the release was ever looked at, so AutoRepeat
+        was never stopped and went on injecting into the whole graphical session
+        until someone restarted the service.
+
+        It is easy to hit rather than exotic. Hold the D-pad down to scroll
+        YouTube TV (KEY_DOWN every 130 ms) and the window changes underneath —
+        BUTTON_SELECT's long press is CTRL+W, which closes the kiosk outright.
+        Release the D-pad and there is no profile left to handle it.
+
+        Uses cancel(), not on_release(): on_release fires the binding, which
+        would inject a key the new window never asked for.
+        """
+        if self._repeater is not None:
+            self._repeater.stop()
+        for sm in self._state_machines.values():
+            sm.cancel()
+        self._stick_dpads.clear()
+
     def _handle_event(self, ev: GamepadEvent) -> None:
         assert self._matcher is not None
         profile = self._matcher.get_active()
         if profile is None:
-            # No browser profile active — passthrough, don't inject anything
+            # No browser profile active — passthrough, don't inject anything.
+            # The flush is what stops a repeat that was running when the profile
+            # went away; it is idempotent, so doing it per event is harmless.
+            self._flush_input_state()
             return
 
         cfg = profile.config
@@ -123,7 +149,15 @@ class Daemon:
         binding = profile.get_binding(button)
         cfg = profile.config
 
-        has_long_press = binding is not None and binding.long_press is not None
+        # Nothing mapped means no effect at all — neither fire nor stop. This
+        # used to fall through to the else branch below and call
+        # _repeater.stop() on every unmapped axis: an analog trigger emits a
+        # stream of values under threshold, so brushing L2 to change the volume
+        # cut the scroll the D-pad was still holding.
+        if binding is None:
+            return
+
+        has_long_press = binding.long_press is not None
 
         if has_long_press:
             # Buttons with short+long press distinction: use state machine (fires on release)
@@ -142,15 +176,17 @@ class Daemon:
         else:
             # Simple button (navigation, media…): fire immediately on press + repeat
             if value >= 0.5:
-                if binding and binding.short_press:
+                if binding.short_press:
                     self._fire_action(binding.short_press, False)
                     self._repeater.start(
                         binding.short_press,
                         delay_ms=cfg.repeat_delay_ms,
                         rate_ms=cfg.repeat_rate_ms,
+                        owner=button,
                     )
             else:
-                self._repeater.stop()
+                # Only this button's own repeat — see AutoRepeat.stop().
+                self._repeater.stop(owner=button)
 
     def _fire_action(self, action: KeyAction, is_repeat: bool) -> None:
         assert self._injector is not None
@@ -164,8 +200,15 @@ class Daemon:
 
     def _on_window_change(self, window: ActiveWindow | None) -> None:
         assert self._matcher is not None
+        before = self._matcher.get_active()
         self._matcher.on_window_change(window)
         active = self._matcher.get_active()
+        # Held keys belong to the profile that was active when they went down.
+        # Flushing here, rather than waiting for the next event, means a repeat
+        # stops the moment the window changes instead of running until whatever
+        # arrives next.
+        if active is not before:
+            self._flush_input_state()
         title = window.title if window else "(none)"
         profile_name = active.name if active else "passthrough (no injection)"
         from rich.markup import escape

@@ -1,12 +1,30 @@
 """Detect active browser via Firefox profile (--profile flag) or xprop window scan."""
 from __future__ import annotations
 
+import logging
 import os
 import re
 import subprocess
 import threading
 from dataclasses import dataclass
 from typing import Callable
+
+log = logging.getLogger(__name__)
+
+# Every X11 failure below used to be swallowed silently, and that silence is
+# what made the DISPLAY=:0 bug in the service unit undiagnosable: xprop failed
+# on every call, _scan_firefox_window() returned None, the daemon dropped every
+# event, and the only thing in the journal was a cheerful
+# "Window: '(none)' → passthrough (no injection)". Warn once per distinct
+# reason — this runs on a poll loop and must not fill the journal.
+_warned: set[str] = set()
+
+
+def _warn_once(key: str, message: str, *args) -> None:
+    if key in _warned:
+        return
+    _warned.add(key)
+    log.warning(message, *args)
 
 
 @dataclass
@@ -34,8 +52,8 @@ def _get_firefox_profile() -> str | None:
                         return os.path.basename(arg.split('=', 1)[1])
             except (PermissionError, FileNotFoundError):
                 continue
-    except Exception:
-        pass
+    except Exception as e:
+        _warn_once("proc-scan", "cannot scan /proc for a Firefox profile: %s", e)
     return None
 
 
@@ -53,7 +71,13 @@ def _xprop_get(wid_hex: str, *props: str) -> dict[str, str]:
                 if line.startswith(prop):
                     result[prop] = line
         return result
-    except Exception:
+    except FileNotFoundError:
+        _warn_once("no-xprop", "xprop is not installed — window detection cannot work")
+        return {}
+    except Exception as e:
+        _warn_once("xprop-window",
+                   "xprop failed on window %s (DISPLAY=%r XAUTHORITY=%r): %s",
+                   wid_hex, os.environ.get("DISPLAY"), os.environ.get("XAUTHORITY"), e)
         return {}
 
 
@@ -68,7 +92,18 @@ def _get_all_window_ids() -> list[str]:
         # "_NET_CLIENT_LIST(WINDOW): window id # 0x123, 0x456"
         ids = re.findall(r'0x[0-9a-fA-F]+', out)
         return ids
-    except Exception:
+    except FileNotFoundError:
+        _warn_once("no-xprop", "xprop is not installed — window detection cannot work")
+        return []
+    except Exception as e:
+        # The one that matters: cannot open the display. Without DISPLAY and a
+        # matching XAUTHORITY, this fails on every poll and the daemon silently
+        # passes every event through.
+        _warn_once("xprop-root",
+                   "cannot read the X11 window list (DISPLAY=%r XAUTHORITY=%r): %s — "
+                   "the daemon will inject nothing. The session must export both; "
+                   "see `systemctl --user import-environment DISPLAY XAUTHORITY`.",
+                   os.environ.get("DISPLAY"), os.environ.get("XAUTHORITY"), e)
         return []
 
 

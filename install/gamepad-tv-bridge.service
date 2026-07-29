@@ -1,11 +1,27 @@
 [Unit]
 Description=Gamepad TV Bridge — gamepad to keyboard daemon
 After=graphical-session.target
+# Give up after 5 failed starts in 60s rather than restarting for ever: a loop
+# that never ends hides the fault it is looping on.
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
-SupplementaryGroups=input
-Environment=DISPLAY=:0
+# No SupplementaryGroups= here — it is not supported in a --user unit, and
+# systemd refused to start the service at all (status=216/GROUP). With
+# Restart=on-failure and RestartSec=3 that was a failed start every three
+# seconds for ever: the gamepad never worked in any kiosk, and the user journal
+# filled with the same line. It was redundant anyway — install/fix-permissions.sh
+# adds the user to `input`, and the session inherits it.
+#
+# No Environment=DISPLAY=:0 either. That is the display manager's X server, not
+# the session's, and no XAUTHORITY came with it, so every xprop call failed:
+# _scan_firefox_window() returned None, matcher._active stayed None, and the
+# daemon dropped every event it read. Totally inert, with nothing in the log but
+# "Window: '(none)' → passthrough (no injection)". DISPLAY and XAUTHORITY come
+# from the session instead — Plasma runs `systemctl --user import-environment`
+# for exactly this. See the README.
 ExecStart=%h/.venv/bin/python -m gamepad_bridge start
 Restart=on-failure
 RestartSec=3

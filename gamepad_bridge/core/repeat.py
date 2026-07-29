@@ -16,15 +16,24 @@ class AutoRepeat:
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
+        # Which button the running repeat belongs to. There is one repeater for
+        # the whole daemon, and it used to be cancelled by any event that came
+        # in below threshold — including axes nobody mapped. Resting a finger on
+        # an analog trigger produces a stream of ABS_Z values under 0.5, so
+        # nudging the volume killed the scroll you were holding the D-pad down
+        # for.
+        self._owner: str | None = None
 
     def start(
         self,
         action: KeyAction,
         delay_ms: int,
         rate_ms: int,
+        owner: str | None = None,
     ) -> None:
         with self._lock:
             self._cancel()
+            self._owner = owner
             self._stop_event = threading.Event()
             stop = self._stop_event
 
@@ -38,8 +47,17 @@ class AutoRepeat:
             self._thread = threading.Thread(target=_run, daemon=True, name="auto-repeat")
             self._thread.start()
 
-    def stop(self) -> None:
+    def stop(self, owner: str | None = None) -> None:
+        """Stop the repeat.
+
+        With an owner, only if that button is the one that started it — so
+        another button's release cannot cancel a repeat it does not own. Without
+        one (a flush), stop unconditionally.
+        """
         with self._lock:
+            if owner is not None and self._owner is not None and owner != self._owner:
+                return
+            self._owner = None
             self._cancel()
 
     def _cancel(self) -> None:

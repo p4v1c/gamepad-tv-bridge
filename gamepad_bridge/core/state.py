@@ -73,6 +73,22 @@ class ButtonStateMachine:
         if action is not None:
             self._fire_action(action, False)
 
+    def cancel(self) -> None:
+        """Forget a press in progress WITHOUT firing anything.
+
+        Used when the active profile disappears while a button is held: that
+        press belongs to a profile that no longer exists, so acting on its
+        release would inject a key the current window never asked for. Note
+        this is not on_release() — that one fires, which is exactly what must
+        not happen here (BUTTON_SELECT's long press is CTRL+W).
+        """
+        with self._lock:
+            if self._long_press_timer is not None:
+                self._long_press_timer.cancel()
+                self._long_press_timer = None
+            self._state = _State.IDLE
+            self._binding = None
+
     def _on_long_press(self) -> None:
         with self._lock:
             if self._state != _State.PRESSED:
