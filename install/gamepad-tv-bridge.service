@@ -1,5 +1,9 @@
 [Unit]
 Description=Gamepad TV Bridge — gamepad to keyboard daemon
+# Ordering only, and only when a graphical session happens to be in the same
+# transaction. It is NOT a requirement: see the [Install] section — the daemon
+# has to be up in the GameCore console session too, which never reaches this
+# target.
 After=graphical-session.target
 # Give up after 5 failed starts in 60s rather than restarting for ever: a loop
 # that never ends hides the fault it is looping on.
@@ -29,4 +33,17 @@ Restart=on-failure
 RestartSec=3
 
 [Install]
-WantedBy=graphical-session.target
+# default.target, NOT graphical-session.target. A GameCore box runs its kiosk
+# from `gamecore-session.target`, which deliberately never reaches
+# `graphical-session.target` — with linger on, the user manager starts at boot,
+# before any graphical login, so that target says nothing about whether a
+# session exists. Hung off graphical-session.target the daemon started only
+# when someone dropped to the KDE desktop, and the gamepad was dead on every
+# kiosk tile launched from GameCore itself: YouTube launched at 08:09, the
+# bridge's first log line was at 08:20:54, right after `startplasma-wayland`.
+# Nothing in the journal but the daemon never having run at all.
+#
+# Nothing here needs a session: the daemon reads evdev, writes uinput, and
+# finds the active kiosk by reading the Firefox --profile name out of /proc.
+# Restart=on-failure covers the window where /dev/uinput is not ready yet.
+WantedBy=default.target

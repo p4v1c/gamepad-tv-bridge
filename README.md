@@ -72,7 +72,35 @@ How this runs on the [GameCore](https://github.com/p4v1c/GamecoreRenew) living-r
   `~/.venv/bin/pip install -e /opt/gamepad-tv-bridge`
 - User unit `~/.config/systemd/user/gamepad-tv-bridge.service` runs
   `%h/.venv/bin/python -m gamepad_bridge start` with `Restart=on-failure`,
-  `WantedBy=graphical-session.target` (see `install/gamepad-tv-bridge.service`).
+  `WantedBy=default.target` (see `install/gamepad-tv-bridge.service`).
+
+> ### `WantedBy=default.target`, never `graphical-session.target`
+>
+> GameCore does not run its kiosk from `graphical-session.target`. It has its
+> own `gamecore-session.target`, and that is deliberate: the box runs with
+> linger on, so the user manager comes up at boot, before any graphical login —
+> `graphical-session.target` is not a reliable statement about a session
+> existing.
+>
+> Hung off `graphical-session.target`, this daemon therefore started **only**
+> when someone dropped out of the kiosk to the KDE desktop. In the console
+> session — the one that actually launches the YouTube and Twitch tiles — it
+> never ran at all, and the gamepad did nothing. It looks exactly like a
+> matching bug and is not one: the journal has no daemon in it to look at.
+> Measured on the box: YouTube launched at 08:09:35, the daemon's first line
+> came at 08:20:54, right after `startplasma-wayland` took over.
+>
+> Nothing here needs a graphical session anyway — evdev in, uinput out, and the
+> active kiosk found by reading the Firefox `--profile` name out of `/proc`.
+>
+> Upgrading an older install: `systemctl --user enable` does not remove the
+> symlink the previous `[Install]` left behind, so drop it by hand (or re-run
+> `install/setup.sh`, which now does it):
+>
+> ```bash
+> rm -f ~/.config/systemd/user/graphical-session.target.wants/gamepad-tv-bridge.service
+> systemctl --user daemon-reload && systemctl --user enable --now gamepad-tv-bridge
+> ```
 
 > ### The unit needs `DISPLAY` and `XAUTHORITY` from the session
 >
