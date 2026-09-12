@@ -16,6 +16,12 @@ echo "==> Installing systemd user service"
 mkdir -p "$SERVICE_DIR"
 cp "$SCRIPT_DIR/gamepad-tv-bridge.service" "$SERVICE_DIR/"
 systemctl --user daemon-reload
+# The unit used to be WantedBy=graphical-session.target, and `enable` does not
+# clean up the symlink a previous [Install] left behind. Left there it is not
+# merely untidy: on a GameCore box that target is only reached by the KDE
+# desktop, never by the kiosk session, which is exactly where the daemon has to
+# run. Drop it explicitly before enabling.
+rm -f "$SERVICE_DIR/graphical-session.target.wants/gamepad-tv-bridge.service"
 systemctl --user enable gamepad-tv-bridge.service
 
 echo "==> Checking input group membership"
