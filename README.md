@@ -60,6 +60,15 @@ bindings:
 
 Profiles are hot-reloaded on change — no restart needed.
 
+A **suspended** app never matches. GameCore backgrounds an application by
+sending SIGSTOP to its process group, and a stopped Firefox keeps everything
+this daemon looks at — it is still in `/proc` with its `--profile` argument,
+and its window is still in `_NET_CLIENT_LIST`. Matching it anyway meant the
+daemon kept injecting into whatever had the screen next, which on a GameCore
+box is the interface: the interface reads the pad itself, so every press
+counted twice. A process in state `T`, `t`, `Z` or `X` is therefore skipped,
+and a second kiosk still running is matched in its place.
+
 Sticks are converted to dpad presses with hysteresis (release at 65% of the
 press threshold) and a dominant-axis lock, so diagonal wobble never fires the
 perpendicular direction.

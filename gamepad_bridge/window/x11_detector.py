@@ -1,4 +1,16 @@
-"""Detect active browser via Firefox profile (--profile flag) or xprop window scan."""
+"""Detect the active browser via its Firefox profile (--profile) or an xprop scan.
+
+"Active" here means *running and not frozen*, which is narrower than it used to
+be and is the whole point. GameCore suspends an application by sending SIGSTOP
+to its process group, and a stopped Firefox keeps everything this module used
+to look at: it is still in /proc with its `--profile` argument, and its window
+is still in `_NET_CLIENT_LIST`. So a YouTube or Twitch tile sent to the
+background kept its profile active, and the daemon went on injecting KEY_UP,
+KEY_DOWN and KEY_RETURN into whatever had the screen next — the GameCore
+interface, which reads the pad itself. Every press counted twice.
+
+A frozen app is not one a keystroke can reach, so it is not a match.
+"""
 from __future__ import annotations
 
 import logging
@@ -27,6 +39,47 @@ def _warn_once(key: str, message: str, *args) -> None:
     log.warning(message, *args)
 
 
+#: Where the process table is read from. A module constant so the tests can
+#: point it at a synthetic tree; nothing else ever changes it.
+_PROC = '/proc'
+
+#: /proc states that mean "this process cannot act on a keystroke".
+#: `T` is SIGSTOP (how GameCore backgrounds a session), `t` is a tracing stop,
+#: `Z` and `X` are a process on its way out.
+_INERT_STATES = frozenset("TtZX")
+
+
+def _proc_state(pid: str) -> str:
+    """The scheduler state letter from /proc/<pid>/stat, or '' if unreadable.
+
+    Parsed from the last ')' rather than by splitting on spaces: field 2 is the
+    executable name in parentheses and may itself contain spaces and
+    parentheses, so `line.split()[2]` is wrong for exactly the processes whose
+    name is least predictable.
+    """
+    try:
+        with open(f'{_PROC}/{pid}/stat', 'rb') as f:
+            line = f.read().decode('utf-8', errors='replace')
+    except (PermissionError, FileNotFoundError, ProcessLookupError):
+        return ''
+    end = line.rfind(')')
+    if end == -1:
+        return ''
+    fields = line[end + 1:].split()
+    return fields[0] if fields else ''
+
+
+def _is_frozen(pid: str | int) -> bool:
+    """True when the process is stopped or dying, so nothing can be typed into it.
+
+    An unreadable state is NOT treated as frozen: a process we cannot inspect
+    is more likely one we lack permission on than one that is suspended, and
+    refusing to match there would break the daemon for a whole class of setups
+    to fix a narrower bug than the one it causes.
+    """
+    return _proc_state(str(pid)) in _INERT_STATES
+
+
 @dataclass
 class ActiveWindow:
     title: str
@@ -37,23 +90,35 @@ class ActiveWindow:
 def _get_firefox_profile() -> str | None:
     """Return the active Firefox --profile name from /proc, or None."""
     try:
-        for pid in os.listdir('/proc'):
+        for pid in os.listdir(_PROC):
             if not pid.isdigit():
                 continue
             try:
-                with open(f'/proc/{pid}/cmdline', 'rb') as f:
+                with open(f'{_PROC}/{pid}/cmdline', 'rb') as f:
                     args = f.read().decode('utf-8', errors='replace').split('\x00')
                 if 'firefox' not in os.path.basename(args[0]):
                     continue
+                name = None
                 for i, arg in enumerate(args):
                     if arg == '--profile' and i + 1 < len(args):
-                        return os.path.basename(args[i + 1])
+                        name = os.path.basename(args[i + 1])
+                        break
                     if arg.startswith('--profile='):
-                        return os.path.basename(arg.split('=', 1)[1])
+                        name = os.path.basename(arg.split('=', 1)[1])
+                        break
+                if name is None:
+                    continue
+                # `continue`, not `return None`: a second kiosk may be running
+                # while this one is suspended — YouTube frozen in the
+                # background with Twitch on the screen is a normal state, and
+                # the one still running is the one to match.
+                if _is_frozen(pid):
+                    continue
+                return name
             except (PermissionError, FileNotFoundError):
                 continue
     except Exception as e:
-        _warn_once("proc-scan", "cannot scan /proc for a Firefox profile: %s", e)
+        _warn_once("proc-scan", "cannot scan %s for a Firefox profile: %s", _PROC, e)
     return None
 
 
@@ -110,16 +175,24 @@ def _get_all_window_ids() -> list[str]:
 def _scan_firefox_window() -> ActiveWindow | None:
     """Enumerate all X11 windows and return info for the Firefox one."""
     for wid in _get_all_window_ids():
-        props = _xprop_get(wid, '_NET_WM_NAME', 'WM_CLASS')
+        props = _xprop_get(wid, '_NET_WM_NAME', 'WM_CLASS', '_NET_WM_PID')
         wm_class_line = props.get('WM_CLASS', '')
         if 'firefox' not in wm_class_line.lower() and 'Firefox' not in wm_class_line:
+            continue
+        # A suspended kiosk keeps its window mapped and listed, so this path
+        # needs the same liveness check as the /proc one — see the module
+        # docstring. The pid comes from the window rather than a second /proc
+        # walk, and a window without one is matched as before.
+        pid_m = re.search(r'=\s*(\d+)', props.get('_NET_WM_PID', ''))
+        pid = int(pid_m.group(1)) if pid_m else 0
+        if pid and _is_frozen(pid):
             continue
         # Found a Firefox window
         title_line = props.get('_NET_WM_NAME', '')
         # Extract value from: _NET_WM_NAME(UTF8_STRING) = "Some Title"
         m = re.search(r'"([^"]*)"', title_line)
         title = m.group(1) if m else ''
-        return ActiveWindow(title=title, wm_class='firefox', pid=0)
+        return ActiveWindow(title=title, wm_class='firefox', pid=pid)
     return None
 
 
