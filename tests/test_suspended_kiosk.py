@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -169,6 +170,67 @@ def test_an_unreadable_state_still_matches():
             assert x11_detector._get_firefox_profile() == 'youtube-tv'
         finally:
             x11_detector._PROC = old
+
+
+# ── the screen owner, not merely a browser which exists ──────────────────────
+
+def test_gamecore_on_screen_overrides_a_running_firefox():
+    """The bridge must never type into GameCore, even during a suspend race."""
+    with patch.object(x11_detector, '_screen_owner', return_value='gamecore'), \
+         patch.object(x11_detector, '_get_firefox_profile', return_value='youtube-tv'):
+        assert x11_detector._detect_active() is None
+
+
+def test_a_focused_firefox_still_gets_its_profile():
+    with patch.object(x11_detector, '_screen_owner', return_value='firefox'), \
+         patch.object(x11_detector, '_get_firefox_profile', return_value='youtube-tv'):
+        active = x11_detector._detect_active()
+    assert active is not None
+    assert active.title == 'youtube-tv'
+
+
+def test_no_x11_answer_keeps_the_proc_fallback_working():
+    """The service starts before X on some boxes; absence is not GameCore."""
+    with patch.object(x11_detector, '_screen_owner', return_value=None), \
+         patch.object(x11_detector, '_get_firefox_profile', return_value='twitch-tv'):
+        active = x11_detector._detect_active()
+    assert active is not None
+    assert active.title == 'twitch-tv'
+
+
+def test_another_focused_window_is_also_passthrough():
+    with patch.object(x11_detector, '_screen_owner', return_value='other'), \
+         patch.object(x11_detector, '_get_firefox_profile', return_value='youtube-tv'):
+        assert x11_detector._detect_active() is None
+
+
+def test_stacking_fallback_sees_gamecore_above_firefox():
+    """Openbox may publish no _NET_ACTIVE_WINDOW, but still publishes stacking."""
+    def output(args, **_kwargs):
+        if args[-1] == '_NET_ACTIVE_WINDOW':
+            return b'_NET_ACTIVE_WINDOW(WINDOW): window id # 0x0\n'
+        if args[-1] == '_NET_CLIENT_LIST_STACKING':
+            return b'_NET_CLIENT_LIST_STACKING(WINDOW): window id # 0x10, 0x20\n'
+        if args[2] == '0x20':
+            return b'WM_CLASS(STRING) = "gamecore-electron", "GameCore-electron"\n'
+        return b'WM_CLASS(STRING) = "Navigator", "firefox"\n'
+
+    with patch.object(x11_detector.subprocess, 'check_output', side_effect=output):
+        assert x11_detector._screen_owner() == 'gamecore'
+
+
+def test_stacking_fallback_allows_firefox_above_gamecore():
+    def output(args, **_kwargs):
+        if args[-1] == '_NET_ACTIVE_WINDOW':
+            return b'_NET_ACTIVE_WINDOW(WINDOW): window id # 0x0\n'
+        if args[-1] == '_NET_CLIENT_LIST_STACKING':
+            return b'_NET_CLIENT_LIST_STACKING(WINDOW): window id # 0x20, 0x10\n'
+        if args[2] == '0x10':
+            return b'WM_CLASS(STRING) = "Navigator", "firefox"\n'
+        return b'WM_CLASS(STRING) = "gamecore-electron", "GameCore-electron"\n'
+
+    with patch.object(x11_detector.subprocess, 'check_output', side_effect=output):
+        assert x11_detector._screen_owner() == 'firefox'
 
 
 if __name__ == '__main__':

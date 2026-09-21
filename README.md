@@ -69,6 +69,13 @@ box is the interface: the interface reads the pad itself, so every press
 counted twice. A process in state `T`, `t`, `Z` or `X` is therefore skipped,
 and a second kiosk still running is matched in its place.
 
+GameCore also has an explicit hard boundary. Before scanning Firefox processes,
+the bridge asks X11 which window owns the screen. `gamecore-electron` (or any
+other focused non-Firefox window) means passthrough: no virtual key is emitted.
+Openbox sometimes leaves `_NET_ACTIVE_WINDOW` at zero, so the bridge then reads
+`_NET_CLIENT_LIST_STACKING` and uses the topmost GameCore/Firefox window. The
+process-state check above remains the fallback when X11 is not available.
+
 Sticks are converted to dpad presses with hysteresis (release at 65% of the
 press threshold) and a dominant-axis lock, so diagonal wobble never fires the
 perpendicular direction.
@@ -113,17 +120,21 @@ How this runs on the [GameCore](https://github.com/p4v1c/GamecoreRenew) living-r
 
 > ### The unit needs `DISPLAY` and `XAUTHORITY` from the session
 >
-> `_detect_active()` has **two** paths, and only the second needs X:
+> `_detect_active()` has an X11 ownership guard followed by two detection paths:
 >
-> 1. **The Firefox `--profile` name**, read from `/proc/*/cmdline`. No X at all.
+> 1. **Screen ownership**, from `_NET_ACTIVE_WINDOW`, or Openbox's stacking
+>    list when the active id is zero. GameCore and non-Firefox owners disable
+>    injection.
+> 2. **The Firefox `--profile` name**, read from `/proc/*/cmdline`. No X at all.
 >    This is how a GameCore kiosk tile is matched, since it launches
 >    `firefox --profile <name> --kiosk …`.
-> 2. **`xprop`**, scanning window titles. The fallback for anything that is not
+> 3. **`xprop`**, scanning window titles. The fallback for anything that is not
 >    a named-profile Firefox.
 >
 > So a broken X11 connection does **not** make the daemon inert: profile-based
 > matching keeps working, and only the title fallback dies. The journal shows
-> `Window: '(none)' → passthrough` when *neither* path resolves.
+> `Window: '(none)' → passthrough` when neither detection path resolves or the
+> ownership guard says the browser does not own the screen.
 >
 > The unit deliberately does **not** set `Environment=DISPLAY=:0`: that is the
 > display manager's server, not the session's, and it carries no matching

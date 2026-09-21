@@ -9,7 +9,10 @@ background kept its profile active, and the daemon went on injecting KEY_UP,
 KEY_DOWN and KEY_RETURN into whatever had the screen next — the GameCore
 interface, which reads the pad itself. Every press counted twice.
 
-A frozen app is not one a keystroke can reach, so it is not a match.
+A frozen app is not one a keystroke can reach, so it is not a match. More
+importantly, a browser merely existing is never allowed to override positive
+evidence that GameCore owns the screen: `_NET_ACTIVE_WINDOW` is checked first,
+then Openbox's stacking list when it leaves that property at zero.
 """
 from __future__ import annotations
 
@@ -47,6 +50,10 @@ _PROC = '/proc'
 #: `T` is SIGSTOP (how GameCore backgrounds a session), `t` is a tracing stop,
 #: `Z` and `X` are a process on its way out.
 _INERT_STATES = frozenset("TtZX")
+
+# Electron derives these from GameCore's package/product names. Exact values,
+# case-insensitive: a web page title containing "gamecore" is not the shell.
+_GAMECORE_WM_CLASSES = frozenset(("gamecore", "gamecore-electron"))
 
 
 def _proc_state(pid: str) -> str:
@@ -146,6 +153,49 @@ def _xprop_get(wid_hex: str, *props: str) -> dict[str, str]:
         return {}
 
 
+def _root_window_ids(prop: str) -> list[str]:
+    """Read one EWMH root-window property, excluding the null window."""
+    try:
+        out = subprocess.check_output(
+            ['xprop', '-root', prop],
+            stderr=subprocess.DEVNULL,
+            timeout=1,
+        ).decode('utf-8', errors='replace')
+        return [wid for wid in re.findall(r'0x[0-9a-fA-F]+', out)
+                if int(wid, 16) != 0]
+    except (FileNotFoundError, subprocess.SubprocessError, OSError):
+        return []
+
+
+def _window_kind(wid: str) -> str | None:
+    """Classify only the two window families whose ownership matters here."""
+    line = _xprop_get(wid, 'WM_CLASS').get('WM_CLASS', '')
+    classes = {value.lower() for value in re.findall(r'"([^"]*)"', line)}
+    if classes & _GAMECORE_WM_CLASSES:
+        return 'gamecore'
+    if 'firefox' in classes:
+        return 'firefox'
+    return None
+
+
+def _screen_owner() -> str | None:
+    """Return `gamecore`, `firefox`, `other`, or None when X cannot answer.
+
+    A real active-window answer is authoritative. Openbox configurations which
+    leave it at 0 still publish `_NET_CLIENT_LIST_STACKING`, ordered bottom to
+    top; the topmost GameCore/Firefox window then answers the same question.
+    """
+    active = _root_window_ids('_NET_ACTIVE_WINDOW')
+    if active:
+        return _window_kind(active[-1]) or 'other'
+
+    stacking = _root_window_ids('_NET_CLIENT_LIST_STACKING')
+    for wid in reversed(stacking):
+        if kind := _window_kind(wid):
+            return kind
+    return None
+
+
 def _get_all_window_ids() -> list[str]:
     """Return all window IDs from _NET_CLIENT_LIST via xprop."""
     try:
@@ -197,6 +247,13 @@ def _scan_firefox_window() -> ActiveWindow | None:
 
 
 def _detect_active() -> ActiveWindow | None:
+    # A hard boundary: when GameCore (or another non-Firefox window) positively
+    # owns the screen, never turn a gamepad event into a keyboard event. This is
+    # checked before the process scan because /proc proves existence, not focus.
+    owner = _screen_owner()
+    if owner in ('gamecore', 'other'):
+        return None
+
     # Priority 1: named Firefox profile (most specific)
     profile = _get_firefox_profile()
     if profile:
@@ -207,7 +264,7 @@ def _detect_active() -> ActiveWindow | None:
 
 
 class WindowWatcher:
-    """Polls every 500ms via /proc + xprop — no dependency on _NET_ACTIVE_WINDOW."""
+    """Poll every 500 ms; active-window, stacking, then safe /proc fallback."""
 
     def __init__(self, on_change: Callable[[ActiveWindow | None], None]) -> None:
         self._on_change = on_change
